@@ -101,10 +101,20 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
     <div class="actions">
       <button class="primary" id="saveBtn">保存配置</button>
       <button class="secondary" id="reloadBtn">重新加载</button>
+      <button class="secondary" id="gateBtn">生成 Gate 配置</button>
     </div>
 
     <div class="status" id="status"></div>
     <div class="code" id="jsonView"></div>
+
+    <div id="gateSection" style="display:none;margin-top:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label style="font-size:15px;color:#eaf2ff;font-weight:600">Nginx Gate 505 配置</label>
+        <button class="secondary" id="copyGateBtn" style="padding:8px 14px;font-size:12px">复制配置</button>
+      </div>
+      <div class="hint" style="margin-bottom:10px">将此配置替换目标站的 docker/site.conf，直接访问目标站会返回 505，只有通过 Go Page 跳转才能正常访问。</div>
+      <div class="code" id="gateView" style="max-height:500px;overflow-y:auto"></div>
+    </div>
   </div>
 </div>
 
@@ -126,6 +136,10 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
   var wcPreview = document.getElementById('wcPreview');
   var fdFields = document.getElementById('fdFields');
   var fixedDomains = document.getElementById('fixedDomains');
+  var gateBtn = document.getElementById('gateBtn');
+  var gateSection = document.getElementById('gateSection');
+  var gateView = document.getElementById('gateView');
+  var copyGateBtn = document.getElementById('copyGateBtn');
 
   function setStatus(text, isError){
     status.textContent = text || '';
@@ -268,6 +282,49 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
   [baseDomain, candidateCount, labelLength].forEach(function(input){
     input.addEventListener('input', refreshPreview);
   });
+
+  gateBtn.addEventListener('click', function(){
+    setStatus('正在生成 Gate 配置...');
+    fetch('/api/generate-gate?t=' + Date.now(), {cache:'no-store'})
+      .then(function(resp){
+        if(!resp.ok){ throw new Error('HTTP ' + resp.status); }
+        return resp.json();
+      })
+      .then(function(data){
+        if(data.ok){
+          gateView.textContent = data.config;
+          gateSection.style.display = 'block';
+          setStatus('Gate 配置已生成，可复制使用');
+        } else {
+          setStatus('生成失败: ' + (data.message || '未知错误'), true);
+        }
+      })
+      .catch(function(err){
+        setStatus('生成失败: ' + err.message, true);
+      });
+  });
+
+  copyGateBtn.addEventListener('click', function(){
+    var text = gateView.textContent;
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(text).then(function(){
+        setStatus('已复制到剪贴板');
+      }).catch(function(){ doCopy(text); });
+    } else { doCopy(text); }
+  });
+
+  function doCopy(text){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    setStatus('已复制到剪贴板');
+  }
+
   loadConfig();
 })();
 </script>

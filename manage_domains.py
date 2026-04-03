@@ -584,6 +584,81 @@ def health_check_worker():
         time.sleep(HEALTH_CHECK_INTERVAL)
 
 
+def build_gate_nginx_config(config):
+    """根据当前配置生成目标站的 Nginx Gate 505 配置"""
+    probe_assets = config.get('probeAssets', [])
+    # 从探测路径提取需要放行的顶级目录
+    whitelist_dirs = set()
+    for path in probe_assets:
+        parts = path.strip('/').split('/')
+        if len(parts) > 1:
+            whitelist_dirs.add(parts[0])
+
+    lines = []
+    lines.append('# ===== Nginx Gate 505 配置 =====')
+    lines.append('# 生成时间: ' + time.strftime('%Y-%m-%d %H:%M:%S'))
+    lines.append('# 说明: 将此内容替换目标站的 docker/site.conf')
+    lines.append('# 直接访问目标站返回 505，只有通过 Go Page 跳转才能正常访问')
+    lines.append('# ================================')
+    lines.append('')
+    lines.append('server {')
+    lines.append('    listen 8080;')
+    lines.append('    server_name _;')
+    lines.append('    root /var/www/html/public;')
+    lines.append('    index index.php index.html;')
+    lines.append('')
+    lines.append('    absolute_redirect off;')
+    lines.append('')
+    lines.append('    # === 探测资源放行 (go_page 探测用) ===')
+    for d in sorted(whitelist_dirs):
+        lines.append('    location /' + d + '/ {')
+        lines.append('        expires 30d;')
+        lines.append('        access_log off;')
+        lines.append('    }')
+        lines.append('')
+    lines.append('    location /favicon.ico { access_log off; }')
+    lines.append('    location /robots.txt  { access_log off; }')
+    lines.append('')
+    lines.append('    # === WebSocket (如不需要可删除) ===')
+    lines.append('    location /wss {')
+    lines.append('        proxy_pass http://127.0.0.1:7273;')
+    lines.append('        proxy_http_version 1.1;')
+    lines.append('        proxy_set_header Upgrade $http_upgrade;')
+    lines.append('        proxy_set_header Connection "Upgrade";')
+    lines.append('    }')
+    lines.append('')
+    lines.append('    # === Gate 内部 cookie 设置 ===')
+    lines.append('    location = /_internal_gate {')
+    lines.append('        internal;')
+    lines.append('        add_header Set-Cookie "_gate_pass=1; Path=/; Max-Age=86400; HttpOnly" always;')
+    lines.append('        return 302 /;')
+    lines.append('    }')
+    lines.append('')
+    lines.append('    # === 主入口 - Gate 逻辑 ===')
+    lines.append('    location / {')
+    lines.append('        set $gate "deny";')
+    lines.append('        if ($cookie__gate_pass = "1") { set $gate "allow"; }')
+    lines.append('        if ($arg__gate)               { set $gate "new";   }')
+    lines.append('        if ($gate = "new")  { rewrite ^ /_internal_gate last; }')
+    lines.append('        if ($gate = "deny") { return 505; }')
+    lines.append('')
+    lines.append('        # ThinkPHP URL rewrite (根据框架修改)')
+    lines.append('        if (!-e $request_filename) {')
+    lines.append('            rewrite ^(.*)$ /index.php?s=/$1 last;')
+    lines.append('        }')
+    lines.append('    }')
+    lines.append('')
+    lines.append('    # === PHP-FPM ===')
+    lines.append('    location ~ \\.php$ {')
+    lines.append('        fastcgi_pass 127.0.0.1:9000;')
+    lines.append('        fastcgi_index index.php;')
+    lines.append('        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;')
+    lines.append('        include fastcgi_params;')
+    lines.append('    }')
+    lines.append('}')
+    return '\n'.join(lines)
+
+
 class GoPageAdminHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BASE_DIR, **kwargs)
@@ -621,11 +696,13 @@ class GoPageAdminHandler(SimpleHTTPRequestHandler):
         # /api/gate-token - 前端跳转前获取 gate token
         if parsed.path == '/api/gate-token':
             return self.send_json({'token': generate_gate_token()})
-        if parsed.path in ('/admin', '/admin/', '/admin.html', '/api/config'):
+        if parsed.path in ('/admin', '/admin/', '/admin.html', '/api/config', '/api/generate-gate'):
             if not self.check_auth():
                 return self.require_auth()
         if parsed.path == '/api/config':
             return self.send_json(load_domains())
+        if parsed.path == '/api/generate-gate':
+            return self.handle_generate_gate()
         if parsed.path in ('/admin', '/admin/'):
             self.path = '/admin.html'
         return super().do_GET()
@@ -665,6 +742,12 @@ class GoPageAdminHandler(SimpleHTTPRequestHandler):
             self.send_json({'ok': True})
         else:
             self.send_json({'ok': False, 'message': '链接已过期或无效'}, status=403)
+
+    def handle_generate_gate(self):
+        """生成 Nginx Gate 505 配置"""
+        config = load_domains()
+        text = build_gate_nginx_config(config)
+        self.send_json({'ok': True, 'config': text})
 
     def do_POST(self):
         if not self.check_auth():
