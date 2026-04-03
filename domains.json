@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "updated": "2026-03-24 19:49:58",
+  "siteName": "KVI",
+  "servers": {},
+  "wildcard": {
+    "enabled": true,
+    "baseDomain": "a.hui-od.top",
+    "candidateCount": 6,
+    "labelLength": 3
+  },
+  "probeAssets": [
+    "/static/index/img/down_left.png",
+    "/static/mobile/imgn/coinwin_ico.png",
+    "/static/mobile/imgn/recharg_2x.png"
+  ],
+  "probeAssetThreshold": 2,
+  "domains": []
+}
