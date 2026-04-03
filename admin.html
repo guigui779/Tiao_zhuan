@@ -24,6 +24,7 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
 .status{margin-top:16px;font-size:14px;color:#9bd7b7;min-height:20px}
 .hint{font-size:12px;color:#8296be;margin-top:6px;line-height:1.6}
 .hint-inline{margin:0}
+.hint-no-margin{margin:0}
 .code{margin-top:20px;background:#09111e;border-radius:14px;padding:16px;white-space:pre-wrap;word-break:break-word;font-family:Consolas,monospace;font-size:12px;color:#cfe0ff}
 .preview-list{width:100%;min-height:120px;border:1px solid rgba(255,255,255,.1);background:#0f1a2d;color:#d9e7ff;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
 .toggle-row{display:flex;align-items:center;gap:12px;margin-bottom:18px}
@@ -50,8 +51,8 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
           <input id="siteName" type="text" placeholder="例如：A 站跳转页">
         </div>
         <div class="toggle-row">
-          <label>通配模式</label>
-          <label class="switch"><input type="checkbox" id="wildcardEnabled" checked><span class="slider"></span></label>
+          <label for="wildcardEnabled">通配模式</label>
+          <label class="switch"><input type="checkbox" id="wildcardEnabled" title="通配模式开关" checked><span class="slider"></span></label>
           <span class="hint" style="margin:0">开启后随机生成子域名；关闭则用固定域名列表。</span>
         </div>
         <div id="wcFields">
