@@ -101,6 +101,10 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
     <div class="actions">
       <button class="primary" id="saveBtn">保存配置</button>
       <button class="secondary" id="reloadBtn">重新加载</button>
+      <select id="gateType" style="border:1px solid rgba(255,255,255,.1);background:#0f1a2d;color:#fff;border-radius:12px;padding:10px 14px;font-size:14px;outline:none">
+        <option value="php">PHP 站 (ThinkPHP)</option>
+        <option value="static">纯静态站</option>
+      </select>
       <button class="secondary" id="gateBtn">生成 Gate 配置</button>
     </div>
 
@@ -136,6 +140,7 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
   var wcPreview = document.getElementById('wcPreview');
   var fdFields = document.getElementById('fdFields');
   var fixedDomains = document.getElementById('fixedDomains');
+  var gateType = document.getElementById('gateType');
   var gateBtn = document.getElementById('gateBtn');
   var gateSection = document.getElementById('gateSection');
   var gateView = document.getElementById('gateView');
@@ -285,7 +290,7 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
 
   gateBtn.addEventListener('click', function(){
     setStatus('正在生成 Gate 配置...');
-    fetch('/api/generate-gate?t=' + Date.now(), {cache:'no-store'})
+    fetch('/api/generate-gate?type=' + gateType.value + '&t=' + Date.now(), {cache:'no-store'})
       .then(function(resp){
         if(!resp.ok){ throw new Error('HTTP ' + resp.status); }
         return resp.json();

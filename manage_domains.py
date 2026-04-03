@@ -584,8 +584,10 @@ def health_check_worker():
         time.sleep(HEALTH_CHECK_INTERVAL)
 
 
-def build_gate_nginx_config(config):
-    """根据当前配置生成目标站的 Nginx Gate 505 配置"""
+def build_gate_nginx_config(config, site_type='php'):
+    """根据当前配置生成目标站的 Nginx Gate 505 配置
+    site_type: 'php' | 'static'
+    """
     probe_assets = config.get('probeAssets', [])
     # 从探测路径提取需要放行的顶级目录
     whitelist_dirs = set()
@@ -594,8 +596,12 @@ def build_gate_nginx_config(config):
         if len(parts) > 1:
             whitelist_dirs.add(parts[0])
 
+    is_php = site_type == 'php'
+    type_label = 'PHP (ThinkPHP)' if is_php else '纯静态站'
+
     lines = []
     lines.append('# ===== Nginx Gate 505 配置 =====')
+    lines.append('# 站点类型: ' + type_label)
     lines.append('# 生成时间: ' + time.strftime('%Y-%m-%d %H:%M:%S'))
     lines.append('# 说明: 将此内容替换目标站的 docker/site.conf')
     lines.append('# 直接访问目标站返回 505，只有通过 Go Page 跳转才能正常访问')
@@ -604,8 +610,12 @@ def build_gate_nginx_config(config):
     lines.append('server {')
     lines.append('    listen 8080;')
     lines.append('    server_name _;')
-    lines.append('    root /var/www/html/public;')
-    lines.append('    index index.php index.html;')
+    if is_php:
+        lines.append('    root /var/www/html/public;')
+        lines.append('    index index.php index.html;')
+    else:
+        lines.append('    root /usr/share/nginx/html;')
+        lines.append('    index index.html;')
     lines.append('')
     lines.append('    absolute_redirect off;')
     lines.append('')
@@ -619,14 +629,15 @@ def build_gate_nginx_config(config):
     lines.append('    location /favicon.ico { access_log off; }')
     lines.append('    location /robots.txt  { access_log off; }')
     lines.append('')
-    lines.append('    # === WebSocket (如不需要可删除) ===')
-    lines.append('    location /wss {')
-    lines.append('        proxy_pass http://127.0.0.1:7273;')
-    lines.append('        proxy_http_version 1.1;')
-    lines.append('        proxy_set_header Upgrade $http_upgrade;')
-    lines.append('        proxy_set_header Connection "Upgrade";')
-    lines.append('    }')
-    lines.append('')
+    if is_php:
+        lines.append('    # === WebSocket (如不需要可删除) ===')
+        lines.append('    location /wss {')
+        lines.append('        proxy_pass http://127.0.0.1:7273;')
+        lines.append('        proxy_http_version 1.1;')
+        lines.append('        proxy_set_header Upgrade $http_upgrade;')
+        lines.append('        proxy_set_header Connection "Upgrade";')
+        lines.append('    }')
+        lines.append('')
     lines.append('    # === Gate 内部 cookie 设置 ===')
     lines.append('    location = /_internal_gate {')
     lines.append('        internal;')
@@ -642,19 +653,23 @@ def build_gate_nginx_config(config):
     lines.append('        if ($gate = "new")  { rewrite ^ /_internal_gate last; }')
     lines.append('        if ($gate = "deny") { return 505; }')
     lines.append('')
-    lines.append('        # ThinkPHP URL rewrite (根据框架修改)')
-    lines.append('        if (!-e $request_filename) {')
-    lines.append('            rewrite ^(.*)$ /index.php?s=/$1 last;')
-    lines.append('        }')
+    if is_php:
+        lines.append('        # ThinkPHP URL rewrite')
+        lines.append('        if (!-e $request_filename) {')
+        lines.append('            rewrite ^(.*)$ /index.php?s=/$1 last;')
+        lines.append('        }')
+    else:
+        lines.append('        try_files $uri $uri/ =404;')
     lines.append('    }')
     lines.append('')
-    lines.append('    # === PHP-FPM ===')
-    lines.append('    location ~ \\.php$ {')
-    lines.append('        fastcgi_pass 127.0.0.1:9000;')
-    lines.append('        fastcgi_index index.php;')
-    lines.append('        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;')
-    lines.append('        include fastcgi_params;')
-    lines.append('    }')
+    if is_php:
+        lines.append('    # === PHP-FPM ===')
+        lines.append('    location ~ \\.php$ {')
+        lines.append('        fastcgi_pass 127.0.0.1:9000;')
+        lines.append('        fastcgi_index index.php;')
+        lines.append('        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;')
+        lines.append('        include fastcgi_params;')
+        lines.append('    }')
     lines.append('}')
     return '\n'.join(lines)
 
@@ -745,8 +760,13 @@ class GoPageAdminHandler(SimpleHTTPRequestHandler):
 
     def handle_generate_gate(self):
         """生成 Nginx Gate 505 配置"""
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        site_type = (qs.get('type') or ['php'])[0]
+        if site_type not in ('php', 'static'):
+            site_type = 'php'
         config = load_domains()
-        text = build_gate_nginx_config(config)
+        text = build_gate_nginx_config(config, site_type=site_type)
         self.send_json({'ok': True, 'config': text})
 
     def do_POST(self):
