@@ -3,31 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Go Page 独立后台</title>
+<title>Go Page V4 管理后台</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:linear-gradient(135deg,#0b1220,#15243d);color:#eaf2ff;min-height:100vh;padding:24px}
-.wrap{max-width:980px;margin:0 auto}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
 .panel{background:rgba(8,15,28,.78);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.28)}
-.title{font-size:28px;font-weight:700;margin-bottom:8px}
-.subtitle{color:#8ea2c9;font-size:14px;margin-bottom:24px}
+.page-title{font-size:28px;font-weight:700;margin-bottom:4px}
+.page-sub{color:#8ea2c9;font-size:14px}
+.sec-title{font-size:17px;font-weight:600;margin-bottom:16px;padding-left:10px;border-left:3px solid #34d399}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
-.field{margin-bottom:18px}
-label{display:block;font-size:13px;color:#9eb0d4;margin-bottom:8px}
-input,textarea{width:100%;border:1px solid rgba(255,255,255,.1);background:#0f1a2d;color:#fff;border-radius:12px;padding:12px 14px;font-size:14px;outline:none}
-textarea{min-height:120px;resize:vertical}
+.grid-sm{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
+.field{margin-bottom:16px}
+.field:last-child{margin-bottom:0}
+label{display:block;font-size:13px;color:#9eb0d4;margin-bottom:6px}
+input,textarea,select{width:100%;border:1px solid rgba(255,255,255,.1);background:#0f1a2d;color:#fff;border-radius:10px;padding:10px 12px;font-size:14px;outline:none}
+textarea{min-height:90px;resize:vertical}
 input:focus,textarea:focus{border-color:#4fd1c5;box-shadow:0 0 0 3px rgba(79,209,197,.12)}
-.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
-button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weight:600;cursor:pointer}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s}
+button:active{opacity:.8}
 .primary{background:linear-gradient(90deg,#23c4ed,#34d399);color:#052033}
 .secondary{background:#1f2f4d;color:#dce8ff}
-.status{margin-top:16px;font-size:14px;color:#9bd7b7;min-height:20px}
-.hint{font-size:12px;color:#8296be;margin-top:6px;line-height:1.6}
-.hint-inline{margin:0}
-.hint-no-margin{margin:0}
-.code{margin-top:20px;background:#09111e;border-radius:14px;padding:16px;white-space:pre-wrap;word-break:break-word;font-family:Consolas,monospace;font-size:12px;color:#cfe0ff}
-.preview-list{width:100%;min-height:120px;border:1px solid rgba(255,255,255,.1);background:#0f1a2d;color:#d9e7ff;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
-.toggle-row{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.status{margin-top:14px;font-size:13px;color:#9bd7b7;min-height:18px}
+.hint{font-size:12px;color:#8296be;margin-top:4px;line-height:1.5}
+.code{margin-top:16px;background:#09111e;border-radius:12px;padding:14px;white-space:pre-wrap;word-break:break-word;font-family:Consolas,monospace;font-size:12px;color:#cfe0ff;max-height:320px;overflow-y:auto}
+.preview-list{width:100%;min-height:80px;border:1px solid rgba(255,255,255,.1);background:#0f1a2d;color:#d9e7ff;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.toggle-row{display:flex;align-items:center;gap:12px;margin-bottom:16px}
 .toggle-row>label:first-child{margin-bottom:0;min-width:70px}
 .switch{position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0}
 .switch input{opacity:0;width:0;height:0}
@@ -36,139 +38,157 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
 .switch input:checked+.slider{background:#34d399}
 .switch input:checked+.slider::before{transform:translateX(20px);background:#fff}
 .sec-hide{display:none!important}
+.collapsible{cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px}
+.collapsible::after{content:"▸";font-size:12px;transition:transform .2s}
+.collapsible.open::after{transform:rotate(90deg)}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <!-- Header -->
+  <div class="panel" style="padding:18px 24px">
+    <div class="page-title">Go Page V4 管理后台</div>
+    <div class="page-sub">管理中继跳转、落地域名、探测资源。保存后线上实时生效。</div>
+  </div>
+
+  <!-- 中继配置 -->
   <div class="panel">
-    <div class="title">Go Page 独立后台</div>
-    <div class="subtitle">这套后台只管理 go_page 的跳转配置，不和主程序后台混用。</div>
-
+    <div class="sec-title">中继配置</div>
     <div class="grid">
-      <div>
-        <div class="field">
-          <label for="mainDomains">主域名（客户入口）</label>
-          <textarea id="mainDomains" rows="2" placeholder="每行一个，例如：&#10;fook.pro&#10;another.com"></textarea>
-          <div class="hint">客户访问这些域名时，会 302 到随机中继子域名的 /go。</div>
-        </div>
-        <div class="field">
-          <label for="relayDomains">中继泛域名</label>
-          <textarea id="relayDomains" rows="3" placeholder="每行一个，例如：&#10;fook.pro&#10;another.com"></textarea>
-          <div class="hint">主域名会随机跳到 *.这里的域名/go，需要 DNS 配置泛解析指向本服务器。</div>
-        </div>
-        <div class="field">
-          <label for="relayLabelLength">中继随机前缀长度</label>
-          <input id="relayLabelLength" type="number" min="2" max="16" value="4">
-        </div>
+      <div class="field">
+        <label for="mainDomains">主域名（客户入口）</label>
+        <textarea id="mainDomains" rows="3" placeholder="每行一个，例如：&#10;fook.pro"></textarea>
+        <div class="hint">客户访问这些域名时，302 到随机中继子域名/go。</div>
       </div>
-      <div></div>
+      <div class="field">
+        <label for="relayDomains">中继泛域名</label>
+        <textarea id="relayDomains" rows="3" placeholder="每行一个，例如：&#10;fook.pro"></textarea>
+        <div class="hint">主域名会跳到 *.泛域名/go，需 DNS 泛解析指向本服务器。输入 *.fook.pro 或 fook.pro 均可。</div>
+      </div>
     </div>
-    <hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:20px 0">
+    <div style="max-width:260px">
+      <div class="field">
+        <label for="relayLabelLength">随机前缀长度</label>
+        <input id="relayLabelLength" type="number" min="2" max="16" value="4">
+      </div>
+    </div>
+  </div>
 
+  <!-- 落地配置 -->
+  <div class="panel">
+    <div class="sec-title">落地配置</div>
     <div class="grid">
       <div>
         <div class="field">
           <label for="siteName">站点名称</label>
-          <input id="siteName" type="text" placeholder="例如：A 站跳转页">
+          <input id="siteName" type="text" placeholder="例如：A 站">
         </div>
         <div class="toggle-row">
           <label for="wildcardEnabled">通配模式</label>
-          <label class="switch"><input type="checkbox" id="wildcardEnabled" title="通配模式开关" checked><span class="slider"></span></label>
-          <span class="hint" style="margin:0">开启后随机生成子域名；关闭则用固定域名列表。</span>
+          <label class="switch"><input type="checkbox" id="wildcardEnabled" checked><span class="slider"></span></label>
+          <span class="hint" style="margin:0">开启=随机子域名；关闭=固定列表。</span>
         </div>
         <div id="wcFields">
-        <div class="field">
-          <label for="baseDomain">通配基础域名</label>
-          <input id="baseDomain" type="text" placeholder="例如：a-hui-od.top">
-          <div class="hint">生成的候选域名会是随机前缀 + 这里的基础域名，例如 abc12345.a-hui-od.top。</div>
-        </div>
-        <div class="grid">
           <div class="field">
-            <label for="candidateCount">候选数量</label>
-            <input id="candidateCount" type="number" min="1" max="50">
+            <label for="baseDomain">落地基础域名</label>
+            <input id="baseDomain" type="text" placeholder="例如：example.com">
+            <div class="hint">生成 随机前缀.此域名 作为候选落地地址。</div>
           </div>
-          <div class="field">
-            <label for="labelLength">随机前缀长度</label>
-            <input id="labelLength" type="number" min="3" max="32">
+          <div class="grid-sm">
+            <div class="field">
+              <label for="candidateCount">候选数量</label>
+              <input id="candidateCount" type="number" min="1" max="50">
+            </div>
+            <div class="field">
+              <label for="labelLength">前缀长度</label>
+              <input id="labelLength" type="number" min="3" max="32">
+            </div>
           </div>
-        </div>
         </div>
         <div class="field">
-          <label for="assetThreshold">资源命中阈值</label>
+          <label for="assetThreshold">命中阈值</label>
           <input id="assetThreshold" type="number" min="1" max="20">
-          <div class="hint">例如配置 3 个资源，阈值设 2，表示命中任意 2 个就认为像这个站。</div>
+          <div class="hint">探测资源中命中多少个算可用。</div>
         </div>
       </div>
-
       <div>
         <div class="field">
-          <label for="probeAssets">站点专属资源路径</label>
-          <textarea id="probeAssets" placeholder="每行一个，例如：&#10;/static/index/img/down_left.png&#10;/static/mobile/imgn/coinwin_ico.png"></textarea>
-          <div class="hint">这些路径必须是当前站点特有、能代表页面正常加载的资源。</div>
+          <label for="probeAssets">探测资源路径</label>
+          <textarea id="probeAssets" rows="4" placeholder="每行一个，例如：&#10;/logo.png&#10;/favicon.ico"></textarea>
+          <div class="hint">目标站特有资源，用来判断域名是否可用。</div>
         </div>
         <div class="field" id="wcPreview">
-          <label for="domainPreview">本次会生成的域名预览</label>
+          <label>域名预览</label>
           <div class="preview-list" id="domainPreview"></div>
-          <div class="hint">这里展示当前配置下会检测的具体 3 级域名示例，保存配置后前端会按同样规则生成并检测。</div>
         </div>
-        <div class="field" id="fdFields">
+        <div class="field sec-hide" id="fdFields">
           <label for="fixedDomains">固定域名列表</label>
-          <textarea id="fixedDomains" placeholder="每行一个，格式：URL 或 URL,名称&#10;https://app.example.com&#10;https://m.example.com,移动线路"></textarea>
-          <div class="hint">通配模式关闭时使用这些固定域名。每行一个 URL，可选逗号后加名称。</div>
+          <textarea id="fixedDomains" rows="4" placeholder="每行一个，格式：URL 或 URL,名称&#10;https://app.example.com"></textarea>
+          <div class="hint">通配关闭时使用固定列表。</div>
         </div>
       </div>
     </div>
+  </div>
 
+  <!-- 操作 -->
+  <div class="panel" style="padding:16px 24px">
     <div class="actions">
       <button class="primary" id="saveBtn">保存配置</button>
       <button class="secondary" id="reloadBtn">重新加载</button>
-      <select id="gateType" style="border:1px solid rgba(255,255,255,.1);background:#0f1a2d;color:#fff;border-radius:12px;padding:10px 14px;font-size:14px;outline:none">
+      <select id="gateType" style="border:1px solid rgba(255,255,255,.1);background:#0f1a2d;color:#fff;border-radius:10px;padding:8px 12px;font-size:13px;outline:none">
         <option value="php">PHP 站 (ThinkPHP)</option>
         <option value="static">纯静态站</option>
       </select>
       <button class="secondary" id="gateBtn">生成 Gate 配置</button>
     </div>
-
     <div class="status" id="status"></div>
-    <div class="code" id="jsonView"></div>
 
-    <div id="gateSection" style="display:none;margin-top:24px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <label style="font-size:15px;color:#eaf2ff;font-weight:600">Nginx Gate 505 配置</label>
-        <button class="secondary" id="copyGateBtn" style="padding:8px 14px;font-size:12px">复制配置</button>
+    <div style="margin-top:12px">
+      <div class="collapsible" id="jsonToggle" onclick="this.classList.toggle('open');document.getElementById('jsonView').classList.toggle('sec-hide')">
+        <label style="cursor:pointer;margin:0;color:#8ea2c9;font-size:13px">当前配置 JSON</label>
       </div>
-      <div class="hint" style="margin-bottom:10px">将此配置替换目标站的 docker/site.conf，直接访问目标站会返回 505，只有通过 Go Page 跳转才能正常访问。</div>
-      <div class="code" id="gateView" style="max-height:500px;overflow-y:auto"></div>
+      <div class="code sec-hide" id="jsonView"></div>
+    </div>
+
+    <div id="gateSection" style="display:none;margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <label style="font-size:14px;color:#eaf2ff;font-weight:600">Nginx Gate 505 配置</label>
+        <button class="secondary" id="copyGateBtn" style="padding:6px 12px;font-size:12px">复制</button>
+      </div>
+      <div class="code" id="gateView" style="max-height:400px"></div>
     </div>
   </div>
 </div>
 
 <script>
 (function(){
-  var siteName = document.getElementById('siteName');
-  var mainDomains = document.getElementById('mainDomains');
-  var relayDomains = document.getElementById('relayDomains');
-  var relayLabelLength = document.getElementById('relayLabelLength');
-  var baseDomain = document.getElementById('baseDomain');
-  var candidateCount = document.getElementById('candidateCount');
-  var labelLength = document.getElementById('labelLength');
-  var assetThreshold = document.getElementById('assetThreshold');
-  var probeAssets = document.getElementById('probeAssets');
-  var domainPreview = document.getElementById('domainPreview');
-  var saveBtn = document.getElementById('saveBtn');
-  var reloadBtn = document.getElementById('reloadBtn');
-  var status = document.getElementById('status');
-  var jsonView = document.getElementById('jsonView');
-  var wildcardEnabled = document.getElementById('wildcardEnabled');
-  var wcFields = document.getElementById('wcFields');
-  var wcPreview = document.getElementById('wcPreview');
-  var fdFields = document.getElementById('fdFields');
-  var fixedDomains = document.getElementById('fixedDomains');
-  var gateType = document.getElementById('gateType');
-  var gateBtn = document.getElementById('gateBtn');
-  var gateSection = document.getElementById('gateSection');
-  var gateView = document.getElementById('gateView');
-  var copyGateBtn = document.getElementById('copyGateBtn');
+  var $ = function(id){ return document.getElementById(id); };
+
+  var siteName = $('siteName');
+  var mainDomains = $('mainDomains');
+  var relayDomains = $('relayDomains');
+  var relayLabelLength = $('relayLabelLength');
+  var baseDomain = $('baseDomain');
+  var candidateCount = $('candidateCount');
+  var labelLength = $('labelLength');
+  var assetThreshold = $('assetThreshold');
+  var probeAssets = $('probeAssets');
+  var domainPreview = $('domainPreview');
+  var saveBtn = $('saveBtn');
+  var reloadBtn = $('reloadBtn');
+  var status = $('status');
+  var jsonView = $('jsonView');
+  var wildcardEnabled = $('wildcardEnabled');
+  var wcFields = $('wcFields');
+  var wcPreview = $('wcPreview');
+  var fdFields = $('fdFields');
+  var fixedDomains = $('fixedDomains');
+  var gateType = $('gateType');
+  var gateBtn = $('gateBtn');
+  var gateSection = $('gateSection');
+  var gateView = $('gateView');
+  var copyGateBtn = $('copyGateBtn');
 
   function setStatus(text, isError){
     status.textContent = text || '';
@@ -184,60 +204,45 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
   wildcardEnabled.addEventListener('change', toggleWildcard);
 
   function linesToArray(text){
-    return text.split(/\r?\n/).map(function(item){ return item.trim(); }).filter(Boolean);
+    return text.split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean);
   }
 
-  function randomLabel(length){
-    var chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    var result = '';
-    for(var i = 0; i < length; i++){
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
+  function randomLabel(len){
+    var c = 'abcdefghijklmnopqrstuvwxyz0123456789', r = '';
+    for(var i = 0; i < len; i++) r += c.charAt(Math.floor(Math.random() * c.length));
+    return r;
   }
 
   function refreshPreview(){
     var base = baseDomain.value.trim();
     var count = parseInt(candidateCount.value, 10) || 6;
-    var length = parseInt(labelLength.value, 10) || 8;
-    var lines = [];
-    var used = {};
-    var max = Math.min(Math.max(count, 1), 20);
-
-    if(!base){
-      domainPreview.textContent = '请先填写通配基础域名，例如 a-hui-od.top';
-      return;
+    var len = parseInt(labelLength.value, 10) || 8;
+    if(!base){ domainPreview.textContent = '请先填写落地基础域名'; return; }
+    var lines = [], used = {};
+    while(lines.length < Math.min(count, 20)){
+      var lb = randomLabel(len);
+      if(used[lb]) continue;
+      used[lb] = true;
+      lines.push((lines.length+1) + '. https://' + lb + '.' + base);
     }
-
-    while(lines.length < max){
-      var label = randomLabel(length);
-      if(used[label]){
-        continue;
-      }
-      used[label] = true;
-      lines.push((lines.length + 1) + '. https://' + label + '.' + base);
-    }
-
     domainPreview.textContent = lines.join('\n');
   }
 
-  function fillForm(config){
-    siteName.value = config.siteName || '';
-    var relay = config.relay || {};
-    mainDomains.value = (relay.mainDomains || []).join('\n');
-    relayDomains.value = (relay.relayDomains || []).join('\n');
-    relayLabelLength.value = relay.labelLength || 4;
-    wildcardEnabled.checked = !!(config.wildcard && config.wildcard.enabled !== false);
-    baseDomain.value = (config.wildcard && config.wildcard.baseDomain) || '';
-    candidateCount.value = (config.wildcard && config.wildcard.candidateCount) || 6;
-    labelLength.value = (config.wildcard && config.wildcard.labelLength) || 8;
-    assetThreshold.value = config.probeAssetThreshold || 2;
-    probeAssets.value = (config.probeAssets || []).join('\n');
-    var domainLines = (config.domains || []).map(function(d){
-      return d.name ? d.url + ',' + d.name : d.url;
-    });
-    fixedDomains.value = domainLines.join('\n');
-    jsonView.textContent = JSON.stringify(config, null, 2);
+  function fillForm(cfg){
+    siteName.value = cfg.siteName || '';
+    var r = cfg.relay || {};
+    mainDomains.value = (r.mainDomains || []).join('\n');
+    relayDomains.value = (r.relayDomains || []).join('\n');
+    relayLabelLength.value = r.labelLength || 4;
+    wildcardEnabled.checked = !!(cfg.wildcard && cfg.wildcard.enabled !== false);
+    baseDomain.value = (cfg.wildcard && cfg.wildcard.baseDomain) || '';
+    candidateCount.value = (cfg.wildcard && cfg.wildcard.candidateCount) || 6;
+    labelLength.value = (cfg.wildcard && cfg.wildcard.labelLength) || 8;
+    assetThreshold.value = cfg.probeAssetThreshold || 2;
+    probeAssets.value = (cfg.probeAssets || []).join('\n');
+    var dl = (cfg.domains || []).map(function(d){ return d.name ? d.url+','+d.name : d.url; });
+    fixedDomains.value = dl.join('\n');
+    jsonView.textContent = JSON.stringify(cfg, null, 2);
     toggleWildcard();
     refreshPreview();
   }
@@ -245,9 +250,7 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
   function collectConfig(){
     var domains = linesToArray(fixedDomains.value).map(function(line, i){
       var parts = line.split(',');
-      var url = parts[0].trim();
-      var name = (parts[1] || '').trim() || ('线路' + (i + 1));
-      return { url: url, name: name, provider: 'manual' };
+      return { url: parts[0].trim(), name: (parts[1]||'').trim() || ('线路'+(i+1)), provider: 'manual' };
     });
     return {
       siteName: siteName.value.trim() || '独立跳转站',
@@ -270,98 +273,81 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
 
   function loadConfig(){
     setStatus('正在加载配置...');
-    fetch('/api/config?t=' + Date.now(), {cache:'no-store'})
+    fetch('/admin/api/config?t=' + Date.now(), {cache:'no-store'})
       .then(function(resp){
-        if(!resp.ok){ throw new Error('HTTP ' + resp.status); }
+        if(resp.status === 401){ setStatus('需要登录认证', true); return; }
+        if(!resp.ok) throw new Error('HTTP ' + resp.status);
         return resp.json();
       })
       .then(function(data){
-        fillForm(data);
-        setStatus('配置已加载');
+        if(data){ fillForm(data); setStatus('配置已加载'); }
       })
-      .catch(function(err){
-        setStatus('加载失败: ' + err.message, true);
-      });
+      .catch(function(err){ setStatus('加载失败: ' + err.message, true); });
   }
 
   function saveConfig(){
-    var config = collectConfig();
-    if(config.wildcard.enabled && !config.wildcard.baseDomain){
-      setStatus('通配模式已开启，请填写基础域名', true);
-      return;
+    var cfg = collectConfig();
+    if(cfg.wildcard.enabled && !cfg.wildcard.baseDomain){
+      setStatus('通配模式已开启，请填写基础域名', true); return;
     }
-    if(!config.wildcard.enabled && config.domains.length === 0){
-      setStatus('通配模式已关闭，请至少添加一个固定域名', true);
-      return;
+    if(!cfg.wildcard.enabled && cfg.domains.length === 0){
+      setStatus('通配模式已关闭，请至少添加一个固定域名', true); return;
     }
-    if(config.probeAssets.length === 0){
-      setStatus('请至少填写一个站点专属资源路径', true);
-      return;
+    if(cfg.probeAssets.length === 0){
+      setStatus('请至少填写一个探测资源路径', true); return;
     }
     setStatus('正在保存配置...');
-    fetch('/api/config', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(config)
+    fetch('/admin/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(cfg)
     }).then(function(resp){
-      if(!resp.ok){ throw new Error('HTTP ' + resp.status); }
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
       return resp.json();
     }).then(function(data){
-      if(!data.ok){ throw new Error(data.message || '保存失败'); }
+      if(!data.ok) throw new Error(data.message || '保存失败');
       fillForm(data.config);
       setStatus('配置保存成功');
-    }).catch(function(err){
-      setStatus('保存失败: ' + err.message, true);
-    });
+    }).catch(function(err){ setStatus('保存失败: ' + err.message, true); });
   }
 
   saveBtn.addEventListener('click', saveConfig);
   reloadBtn.addEventListener('click', loadConfig);
-  [baseDomain, candidateCount, labelLength].forEach(function(input){
-    input.addEventListener('input', refreshPreview);
+  [baseDomain, candidateCount, labelLength].forEach(function(el){
+    el.addEventListener('input', refreshPreview);
   });
 
   gateBtn.addEventListener('click', function(){
     setStatus('正在生成 Gate 配置...');
-    fetch('/api/generate-gate?type=' + gateType.value + '&t=' + Date.now(), {cache:'no-store'})
+    fetch('/admin/api/generate-gate?type=' + gateType.value + '&t=' + Date.now(), {cache:'no-store'})
       .then(function(resp){
-        if(!resp.ok){ throw new Error('HTTP ' + resp.status); }
+        if(!resp.ok) throw new Error('HTTP ' + resp.status);
         return resp.json();
       })
       .then(function(data){
         if(data.ok){
           gateView.textContent = data.config;
           gateSection.style.display = 'block';
-          setStatus('Gate 配置已生成，可复制使用');
+          setStatus('Gate 配置已生成');
         } else {
           setStatus('生成失败: ' + (data.message || '未知错误'), true);
         }
       })
-      .catch(function(err){
-        setStatus('生成失败: ' + err.message, true);
-      });
+      .catch(function(err){ setStatus('生成失败: ' + err.message, true); });
   });
 
   copyGateBtn.addEventListener('click', function(){
     var text = gateView.textContent;
     if(navigator.clipboard){
-      navigator.clipboard.writeText(text).then(function(){
-        setStatus('已复制到剪贴板');
-      }).catch(function(){ doCopy(text); });
-    } else { doCopy(text); }
+      navigator.clipboard.writeText(text).then(function(){ setStatus('已复制到剪贴板'); });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      setStatus('已复制到剪贴板');
+    }
   });
-
-  function doCopy(text){
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    setStatus('已复制到剪贴板');
-  }
 
   loadConfig();
 })();

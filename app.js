@@ -1,191 +1,192 @@
 (function () {
   "use strict";
 
-  /* ========== 配置 ========== */
-  var _c = {
-    u: ["domains.json"],       // 配置源
-    t: 2000,                   // 探测超时
-    g: 300,                    // 竞速宽限
-    k: "_jc",                  // 缓存 key
-    l: 300000,                 // 缓存 TTL
-    d: 3,                      // 倒计时
-    r: 3                       // 最大重试
+  /* ===== 配置 ===== */
+  var CFG = {
+    configUrl: "/api/config",
+    probeTimeout: 2000,
+    graceMs: 300,
+    cacheKey: "_jc_v4",
+    cacheTTL: 300000,
+    countdown: 3,
+    maxRetry: 3
   };
 
-  var _df = {
-    w: { e: true, b: "", c: 6, l: 3 },
-    p: [],
-    h: 2,
-    n: [],
-    s: "",
-    ct: {}
+  var DEFAULTS = {
+    wildcard: { enabled: true, baseDomain: "", candidateCount: 6, labelLength: 3 },
+    probeAssets: [],
+    probeAssetThreshold: 2,
+    domains: [],
+    siteName: ""
   };
 
-  /* ========== DOM ========== */
+  /* ===== DOM ===== */
   var $ = function (id) { return document.getElementById(id); };
 
-  /* ========== 工具 ========== */
-  function _cp(d) { return JSON.parse(JSON.stringify(d)); }
+  /* ===== 工具 ===== */
+  function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
 
-  function _nc(cfg) {
-    var r = _cp(_df), s = cfg || {};
-    if (s.wildcard) {
-      r.w.e = s.wildcard.enabled !== false;
-      r.w.b = s.wildcard.baseDomain || r.w.b;
-      r.w.c = parseInt(s.wildcard.candidateCount, 10) || r.w.c;
-      r.w.l = parseInt(s.wildcard.labelLength, 10) || r.w.l;
-    }
-    if (s.domains && s.domains.length) r.n = s.domains.slice();
-    if (s.probeAssets && s.probeAssets.length) r.p = s.probeAssets.slice();
-    if (s.probeAssetThreshold) r.h = parseInt(s.probeAssetThreshold, 10) || r.h;
-    if (s.siteName) r.s = s.siteName;
-    if (s.contact) r.ct = s.contact;
+  function randomLabel(len) {
+    var c = "abcdefghijklmnopqrstuvwxyz0123456789", r = "";
+    for (var i = 0; i < len; i++) r += c.charAt(Math.floor(Math.random() * c.length));
     return r;
   }
 
-  function _rl(len) {
-    var c = "abcdefghijklmnopqrstuvwxyz0123456789", v = "";
-    for (var i = 0; i < len; i++) v += c.charAt(Math.floor(Math.random() * c.length));
-    return v;
+  function normalizeConfig(src) {
+    var r = deepCopy(DEFAULTS);
+    if (!src) return r;
+    if (src.wildcard) {
+      r.wildcard.enabled = src.wildcard.enabled !== false;
+      r.wildcard.baseDomain = src.wildcard.baseDomain || "";
+      r.wildcard.candidateCount = parseInt(src.wildcard.candidateCount, 10) || 6;
+      r.wildcard.labelLength = parseInt(src.wildcard.labelLength, 10) || 3;
+    }
+    if (src.domains && src.domains.length) r.domains = src.domains.slice();
+    if (src.probeAssets && src.probeAssets.length) r.probeAssets = src.probeAssets.slice();
+    if (src.probeAssetThreshold) r.probeAssetThreshold = parseInt(src.probeAssetThreshold, 10) || 2;
+    if (src.siteName) r.siteName = src.siteName;
+    return r;
   }
 
-  /* ========== 缓存 ========== */
-  function _gc() {
+  /* ===== 缓存 ===== */
+  function getCache() {
     try {
-      var raw = localStorage.getItem(_c.k);
+      var raw = localStorage.getItem(CFG.cacheKey);
       if (!raw) return null;
       var o = JSON.parse(raw);
-      if (o && o.u && o.t && (Date.now() - o.t < _c.l)) return o;
-    } catch (e) { }
+      if (o && o.url && o.ts && (Date.now() - o.ts < CFG.cacheTTL)) return o;
+    } catch (e) {}
     return null;
   }
 
-  function _sc(url, lat) {
-    try { localStorage.setItem(_c.k, JSON.stringify({ u: url, la: lat || 0, t: Date.now() })); } catch (e) { }
+  function setCache(url) {
+    try { localStorage.setItem(CFG.cacheKey, JSON.stringify({ url: url, ts: Date.now() })); } catch (e) {}
   }
 
-  /* ========== DNS 预解析 ========== */
-  function _dp(host) {
+  /* ===== DNS 预解析 ===== */
+  function dnsPrefetch(host) {
     var link = document.createElement("link");
     link.rel = "dns-prefetch";
     link.href = "//" + host;
     document.head.appendChild(link);
   }
 
-  /* ========== 域名生成 ========== */
-  function _bw(cfg) {
-    var wc = cfg.w || {};
-    var base = wc.b || "";
-    var count = parseInt(wc.c, 10) || 6;
-    var len = parseInt(wc.l, 10) || 3;
-    var domains = [], used = {}, max = count * 8, att = 0;
-    if (!base) return domains;
-    while (domains.length < count && att < max) {
-      att++;
-      var label = _rl(len);
+  /* ===== 候选域名生成 ===== */
+  function buildWildcardDomains(cfg) {
+    var wc = cfg.wildcard || {};
+    var base = wc.baseDomain || "";
+    if (!base) return [];
+    var count = parseInt(wc.candidateCount, 10) || 6;
+    var len = parseInt(wc.labelLength, 10) || 3;
+    var domains = [], used = {}, attempts = 0;
+    while (domains.length < count && attempts < count * 8) {
+      attempts++;
+      var label = randomLabel(len);
       var url = "https://" + label + "." + base;
       if (used[url]) continue;
       used[url] = true;
-      domains.push({ u: url, n: "\u7ebf\u8def" + (domains.length + 1), v: "w" });
+      domains.push({ url: url, name: "线路" + (domains.length + 1), src: "wildcard" });
     }
     return domains;
   }
 
-  function _rd(cfg) {
-    if (cfg.n && cfg.n.length) return cfg.n;
-    if (cfg.w && cfg.w.e) return _bw(cfg);
+  function resolveDomains(cfg) {
+    if (cfg.domains && cfg.domains.length) return cfg.domains;
+    if (cfg.wildcard && cfg.wildcard.enabled) return buildWildcardDomains(cfg);
     return [];
   }
 
-  /* ========== 探测 ========== */
-  function _pa(url, timeout, cb) {
+  /* ===== 探测 ===== */
+  function probeAsset(url, timeout, cb) {
     var img = new Image(), done = false;
-    var timer = setTimeout(function () { if (done) return; done = true; img.src = ""; cb(false); }, timeout);
+    var timer = setTimeout(function () { if (!done) { done = true; img.src = ""; cb(false); } }, timeout);
     function fin(ok) { if (done) return; done = true; clearTimeout(timer); cb(ok); }
     img.onload = function () { fin(true); };
     img.onerror = function () { fin(false); };
     img.src = url;
   }
 
-  function _cd(domain, cfg, cb) {
+  function checkDomain(domain, cfg, cb) {
     var start = Date.now();
-    var base = domain.u.replace(/\/+$/, "");
-    var assets = (cfg.p && cfg.p.length) ? cfg.p : _df.p;
-    var threshold = parseInt(cfg.h, 10) || _df.h;
-    var state = { d: false, o: 0, t: 0, tm: null };
-    state.tm = setTimeout(function () { _fn(false, 0); }, _c.t);
-    function _fn(ok, lat) {
-      if (state.d) return;
-      state.d = true;
-      clearTimeout(state.tm);
+    var base = domain.url.replace(/\/+$/, "");
+    var assets = (cfg.probeAssets && cfg.probeAssets.length) ? cfg.probeAssets : [];
+    var threshold = parseInt(cfg.probeAssetThreshold, 10) || 2;
+    if (!assets.length) { cb(false, 0); return; }
+
+    var state = { done: false, okCount: 0, total: 0 };
+    var timer = setTimeout(function () { finish(false, 0); }, CFG.probeTimeout);
+
+    function finish(ok, lat) {
+      if (state.done) return;
+      state.done = true;
+      clearTimeout(timer);
       cb(ok, lat || 0);
     }
-    function _ev() {
-      if (state.d) return;
-      if (state.o >= threshold) { _fn(true, Date.now() - start); return; }
-      if (state.t === assets.length && state.o < threshold) _fn(false, 0);
+
+    function evaluate() {
+      if (state.done) return;
+      if (state.okCount >= threshold) { finish(true, Date.now() - start); return; }
+      if (state.total === assets.length && state.okCount < threshold) finish(false, 0);
     }
+
     assets.forEach(function (path) {
-      _pa(base + path + "?_=" + Date.now(), _c.t - 500, function (ok) {
-        state.t++; if (ok) state.o++;
-        _ev();
+      probeAsset(base + path + "?_=" + Date.now(), CFG.probeTimeout - 500, function (ok) {
+        state.total++;
+        if (ok) state.okCount++;
+        evaluate();
       });
     });
   }
 
-  /* ========== UI ========== */
-  function _ss(t) { $("statusText").textContent = t; }
-  function _sp(v) { $("spinnerWrap").style.display = v ? "" : "none"; }
+  /* ===== UI 辅助 ===== */
+  function setStatus(text) { $("statusText").textContent = text; }
+  function showSpinner(v) { $("spinnerWrap").style.display = v ? "" : "none"; }
 
-  function _rn(domains) {
-    var ul = $("lineList"); ul.innerHTML = "";
+  function renderLines(domains) {
+    var ul = $("lineList");
+    ul.innerHTML = "";
     domains.forEach(function (d, i) {
       var li = document.createElement("li");
       li.id = "l-" + i;
-      li.innerHTML = '<span class="line-name">' + d.n + '</span><span class="line-status checking" id="s-' + i + '">\u68c0\u6d4b\u4e2d</span>';
+      li.innerHTML = '<span class="line-name">' + d.name + '</span><span class="line-status checking" id="s-' + i + '">检测中</span>';
       ul.appendChild(li);
     });
   }
 
-  function _ul(i, ok, lat) {
-    var li = $("l-" + i), s = $("s-" + i);
-    if (!li || !s) return;
+  function updateLine(i, ok, lat) {
+    var s = $("s-" + i);
+    if (!s) return;
     s.className = "line-status " + (ok ? "ok" : "fail");
-    s.textContent = ok ? (lat + "ms") : "\u8d85\u65f6";
-    li.className = ok ? "ok" : "fail";
+    s.textContent = ok ? (lat + "ms") : "超时";
+    var li = $("l-" + i);
+    if (li) li.className = ok ? "ok" : "fail";
   }
 
-  function _mb(i) {
+  function markBest(i) {
     var li = $("l-" + i);
     if (li) li.className = "ok best";
   }
 
-  function _bl(i, url) {
+  function bindClick(i, url) {
     var li = $("l-" + i);
-    if (li) li.onclick = function () { _jt(url); };
+    if (li) li.onclick = function () { jumpTo(url); };
   }
 
-  function _sf(cfg) {
+  function showFallback(cfg) {
     $("mainContent").className = "hide";
     $("fallbackContent").className = "";
-    var ct = cfg.ct || {};
-    var html = "";
-    if (ct.telegram) html += '<a href="' + ct.telegram + '" target="_blank" rel="noopener">\ud83d\udcf1 Telegram</a>';
-    if (ct.customerService) html += '<a href="' + ct.customerService + '" target="_blank" rel="noopener">\ud83d\udcac \u5728\u7ebf\u5ba2\u670d</a>';
-    if (!html) html = '<span style="color:#8ea2c9;font-size:13px">\u8bf7\u8054\u7cfb\u60a8\u7684\u63a8\u8350\u4eba\u83b7\u53d6\u6700\u65b0\u5730\u5740</span>';
-    $("contactLinks").innerHTML = html;
   }
 
-  /* ========== 跳转 ========== */
-  function _jt(url) {
-    _sc(url, 0);
-    _ss("\u6b63\u5728\u83b7\u53d6\u8bbf\u95ee\u51ed\u8bc1...");
+  /* ===== 跳转 ===== */
+  function jumpTo(url) {
+    setCache(url);
+    setStatus("正在获取访问凭证...");
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "/api/gate-token", true);
     xhr.timeout = 2000;
     xhr.onload = function () {
       var tk = "";
-      try { var d = JSON.parse(xhr.responseText); tk = d.token || ""; } catch (e) { }
+      try { var d = JSON.parse(xhr.responseText); tk = d.token || ""; } catch (e) {}
       var sep = url.indexOf("?") >= 0 ? "&" : "?";
       window.location.replace(url + sep + "_gate=" + encodeURIComponent(tk));
     };
@@ -194,148 +195,153 @@
     xhr.send();
   }
 
-  /* ========== 倒计时 ========== */
-  function _ct(results, cfg) {
+  /* ===== 倒计时 ===== */
+  function startCountdown(results, cfg) {
     var best = results[0];
-    var rem = _c.d;
+    var rem = CFG.countdown;
     var cancelled = false;
-    _sp(false);
-    _ss(rem + " \u79d2\u540e\u8df3\u8f6c\u5230\u6700\u5feb\u7ebf\u8def...");
+
+    showSpinner(false);
+    setStatus(rem + " 秒后跳转到最快线路...");
     $("mainActions").className = "actions";
-    _mb(best.i);
-    results.forEach(function (r) { _bl(r.i, r.u); });
+    markBest(best.i);
+    results.forEach(function (r) { bindClick(r.i, r.url); });
 
     $("cancelBtn").onclick = function () {
       cancelled = true;
       clearInterval(iv);
-      _ss("\u5df2\u53d6\u6d88\uff0c\u8bf7\u624b\u52a8\u9009\u62e9\u7ebf\u8def");
+      setStatus("已取消，请手动选择线路");
       $("mainActions").className = "actions hide";
     };
 
     var iv = setInterval(function () {
       if (cancelled) return;
       rem--;
-      if (rem <= 0) {
-        clearInterval(iv);
-        _jt(best.u);
-      } else {
-        _ss(rem + " \u79d2\u540e\u8df3\u8f6c\u5230\u6700\u5feb\u7ebf\u8def...");
-      }
+      if (rem <= 0) { clearInterval(iv); jumpTo(best.url); }
+      else setStatus(rem + " 秒后跳转到最快线路...");
     }, 1000);
   }
 
-  /* ========== 全量探测 ========== */
-  function _sp2(cfg, retry) {
+  /* ===== 全量探测 ===== */
+  function startProbe(cfg, retry) {
     retry = retry || 0;
-    var domains = _rd(cfg);
-    if (!domains.length) { _sf(cfg); return; }
-    _sp(true);
-    _ss("\u6b63\u5728\u68c0\u6d4b\u6700\u5feb\u7ebf\u8def...");
-    _rn(domains);
+    var domains = resolveDomains(cfg);
+    if (!domains.length) { showFallback(cfg); return; }
+
+    showSpinner(true);
+    setStatus("正在检测最快线路...");
+    renderLines(domains);
 
     var results = [], done = 0, finished = false, grace = null;
 
     function doFinish() {
-      if (finished) return; finished = true;
+      if (finished) return;
+      finished = true;
       if (grace) clearTimeout(grace);
       if (results.length) {
-        results.sort(function (a, b) { return a.la - b.la; });
-        _ct(results, cfg);
+        results.sort(function (a, b) { return a.lat - b.lat; });
+        startCountdown(results, cfg);
       }
     }
 
     domains.forEach(function (d, i) {
-      _cd(d, cfg, function (ok, lat) {
+      checkDomain(d, cfg, function (ok, lat) {
         done++;
-        _ul(i, ok, lat);
+        updateLine(i, ok, lat);
         if (ok) {
-          results.push({ u: d.u, n: d.n, la: lat, i: i });
-          _bl(i, d.u);
-          if (!grace) grace = setTimeout(doFinish, _c.g);
+          results.push({ url: d.url, name: d.name, lat: lat, i: i });
+          bindClick(i, d.url);
+          if (!grace) grace = setTimeout(doFinish, CFG.graceMs);
         }
         if (done === domains.length) {
           if (results.length) { doFinish(); }
-          else if (retry < _c.r) {
-            _ss("\u91cd\u8bd5\u4e2d (" + (retry + 1) + "/" + _c.r + ")...");
-            setTimeout(function () { _sp2(cfg, retry + 1); }, 800);
-          } else { _sf(cfg); }
+          else if (retry < CFG.maxRetry) {
+            setStatus("重试中 (" + (retry + 1) + "/" + CFG.maxRetry + ")...");
+            setTimeout(function () { startProbe(cfg, retry + 1); }, 800);
+          } else { showFallback(cfg); }
         }
       });
     });
   }
 
-  /* ========== 配置加载 ========== */
-  function _lc(cb) {
-    function tryUrl(i) {
-      if (i >= _c.u.length) { cb(_nc(null)); return; }
-      var xhr = new XMLHttpRequest();
-      xhr.open("GET", _c.u[i] + "?_=" + Date.now(), true);
-      xhr.timeout = 3000;
-      xhr.onload = function () {
-        if (xhr.status === 200) { try { cb(_nc(JSON.parse(xhr.responseText))); return; } catch (e) { } }
-        tryUrl(i + 1);
-      };
-      xhr.onerror = function () { tryUrl(i + 1); };
-      xhr.ontimeout = xhr.onerror;
-      xhr.send();
-    }
-    tryUrl(0);
+  /* ===== 配置加载 ===== */
+  function loadConfig(cb) {
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", CFG.configUrl + "?_=" + Date.now(), true);
+    xhr.timeout = 3000;
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        try { cb(normalizeConfig(JSON.parse(xhr.responseText))); return; } catch (e) {}
+      }
+      cb(normalizeConfig(null));
+    };
+    xhr.onerror = function () { cb(normalizeConfig(null)); };
+    xhr.ontimeout = xhr.onerror;
+    xhr.send();
   }
 
-  /* ========== 鉴权 ========== */
-  function _gt() {
+  /* ===== Token 验证 ===== */
+  function getToken() {
     var m = location.search.match(/[?&]token=([^&]+)/);
     return m ? decodeURIComponent(m[1]) : "";
   }
 
-  function _vt(token, cb) {
+  function verifyToken(token, cb) {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "/api/verify-token?token=" + encodeURIComponent(token), true);
     xhr.timeout = 3000;
     xhr.onload = function () {
-      if (xhr.status === 200) { try { var d = JSON.parse(xhr.responseText); cb(d && d.ok); } catch (e) { cb(false); } }
-      else cb(false);
+      if (xhr.status === 200) {
+        try { var d = JSON.parse(xhr.responseText); cb(d && d.ok); return; } catch (e) {}
+      }
+      cb(false);
     };
     xhr.onerror = function () { cb(false); };
     xhr.ontimeout = xhr.onerror;
     xhr.send();
   }
 
-  function _sd() {
+  function showDenied() {
     $("mainContent").className = "hide";
     $("fallbackContent").className = "";
     document.querySelector(".fallback-icon").textContent = "\ud83d\udd12";
-    document.querySelector(".fallback-title").textContent = "\u8bbf\u95ee\u53d7\u9650";
-    document.querySelector(".fallback-desc").textContent = "302 \u8bf7\u6c42\u906d\u5230\u62d2\u7edd";
-    $("contactLinks").innerHTML = '<span style="color:#8ea2c9;font-size:13px"></span>';
+    document.querySelector(".fallback-title").textContent = "访问受限";
+    document.querySelector(".fallback-desc").textContent = "请通过正确链接访问";
+    $("contactLinks").innerHTML = "";
   }
 
-  /* ========== 入口 ========== */
-  function _init() {
-    var tk = _gt();
-    if (!tk) { _sd(); return; }
-    _ss("\u6b63\u5728\u9a8c\u8bc1\u8bbf\u95ee\u6743\u9650...");
-    _vt(tk, function (ok) {
-      if (!ok) { _sd(); return; }
+  /* ===== 入口 ===== */
+  function init() {
+    var token = getToken();
+    if (!token) { showDenied(); return; }
+
+    setStatus("正在验证访问权限...");
+    verifyToken(token, function (ok) {
+      if (!ok) { showDenied(); return; }
+
+      // 清除 URL 中的 token 参数
       if (window.history && history.replaceState) {
         history.replaceState(null, "", location.pathname);
       }
-      _lc(function (cfg) {
-        if (cfg.s) $("brandName").textContent = cfg.s;
-        if (cfg.w && cfg.w.b) _dp(cfg.w.b);
-        var cached = _gc();
+
+      loadConfig(function (cfg) {
+        if (cfg.siteName) $("brandName").textContent = cfg.siteName;
+        if (cfg.wildcard && cfg.wildcard.baseDomain) dnsPrefetch(cfg.wildcard.baseDomain);
+
+        // 尝试缓存快速通道
+        var cached = getCache();
         if (cached) {
-          _ss("\u5feb\u901f\u9a8c\u8bc1\u4e0a\u6b21\u7ebf\u8def...");
-          _cd({ u: cached.u, n: "\u7f13\u5b58" }, cfg, function (ok2) {
-            if (ok2) _jt(cached.u);
-            else _sp2(cfg);
+          setStatus("快速验证上次线路...");
+          checkDomain({ url: cached.url, name: "缓存" }, cfg, function (ok2) {
+            if (ok2) jumpTo(cached.url);
+            else startProbe(cfg);
           });
         } else {
-          _sp2(cfg);
+          startProbe(cfg);
         }
       });
     });
   }
 
-  _init();
+  init();
 })();
