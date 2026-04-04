@@ -4,8 +4,8 @@
   "siteName": "KVI",
   "servers": {},
   "relay": {
-    "mainDomains": [],
-    "relayDomains": [],
+    "mainDomains": ["fook.pro"],
+    "relayDomains": ["fook.pro"],
     "labelLength": 4
   },
   "wildcard": {
