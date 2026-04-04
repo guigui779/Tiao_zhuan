@@ -226,10 +226,14 @@ def generate_gate_token():
 def build_gate_nginx_config(config, site_type="php"):
     probe_assets = config.get("probeAssets", [])
     whitelist_dirs = set()
+    whitelist_files = set()
     for path in probe_assets:
-        parts = path.strip("/").split("/")
+        cleaned = path.strip("/")
+        parts = cleaned.split("/")
         if len(parts) > 1:
             whitelist_dirs.add(parts[0])
+        elif cleaned:
+            whitelist_files.add(cleaned)
 
     is_php = site_type == "php"
     type_label = "PHP (ThinkPHP)" if is_php else "纯静态站"
@@ -251,6 +255,8 @@ def build_gate_nginx_config(config, site_type="php"):
     lines += ["", "    absolute_redirect off;", "", "    # === 探测资源放行 ==="]
     for d in sorted(whitelist_dirs):
         lines += [f"    location /{d}/ {{", "        expires 30d;", "        access_log off;", "    }", ""]
+    for f in sorted(whitelist_files):
+        lines += [f"    location = /{f} {{ expires 30d; access_log off; }}"]
     lines += ["    location /favicon.ico { access_log off; }", "    location /robots.txt  { access_log off; }", ""]
 
     if is_php:
