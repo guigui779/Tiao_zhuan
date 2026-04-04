@@ -48,6 +48,11 @@ DEFAULT_CONFIG = {
     "updated": "",
     "siteName": "独立跳转站",
     "servers": {},
+    "relay": {
+        "mainDomains": [],
+        "relayDomains": [],
+        "labelLength": 4,
+    },
     "wildcard": {
         "enabled": True,
         "baseDomain": "a.hui-od.top",
@@ -83,10 +88,6 @@ TOKEN_TTL = int(os.environ.get('TOKEN_TTL', '300'))  # token 有效期，默认5
 # Gate 门禁（目标站的访问验证，go_page 和目标站共享此密钥）
 GATE_SECRET = os.environ.get('GATE_SECRET', 'mFf44StGLBt7vkL2HZ0EKPNpHRzNhQ8yI-elmW-4-NE')
 GATE_TTL = int(os.environ.get('GATE_TTL', '300'))  # gate token 有效期，默认5分钟
-
-# 主域名（访问主域名时重定向到随机子域名）
-GO_DOMAIN = os.environ.get('GO_DOMAIN', '')  # 例如 fook.pro
-GO_SUB_LENGTH = int(os.environ.get('GO_SUB_LENGTH', '4'))  # 随机子域名长度
 
 # 巡检配置
 HEALTH_CHECK_INTERVAL = int(os.environ.get('HEALTH_CHECK_INTERVAL', '300'))  # 默认5分钟
@@ -153,6 +154,11 @@ def normalize_config(data):
     probe_assets = source.get('probeAssets', config['probeAssets']) or []
     config['probeAssets'] = [str(item).strip() for item in probe_assets if str(item).strip()]
     config['probeAssetThreshold'] = int(source.get('probeAssetThreshold', config['probeAssetThreshold']) or config['probeAssetThreshold'])
+    relay = source.get('relay', {}) or {}
+    config['relay']['mainDomains'] = [str(d).strip().lower() for d in (relay.get('mainDomains') or []) if str(d).strip()]
+    config['relay']['relayDomains'] = [str(d).strip() for d in (relay.get('relayDomains') or []) if str(d).strip()]
+    config['relay']['labelLength'] = int(relay.get('labelLength', config['relay']['labelLength']) or config['relay']['labelLength'])
+
     config['domains'] = source.get('domains', config['domains']) or []
     return config
 
@@ -701,28 +707,25 @@ class GoPageAdminHandler(SimpleHTTPRequestHandler):
         self.send_header('Content-Length', '0')
         self.end_headers()
 
-    def _is_main_domain(self):
-        """判断请求是否来自主域名（非子域名）"""
-        if not GO_DOMAIN:
-            return False
-        host = (self.headers.get('Host') or '').split(':')[0].lower()
-        return host == GO_DOMAIN.lower()
-
-    def _random_subdomain_url(self, path='/go'):
-        """生成随机子域名的 URL"""
-        label = ''.join(random.choices(string.ascii_lowercase + string.digits, k=GO_SUB_LENGTH))
-        return f'https://{label}.{GO_DOMAIN}{path}'
-
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        # 主域名访问 → 重定向到随机子域名的 /go
-        if self._is_main_domain() and parsed.path in ('/', '/index.html', '/go', '/go/'):
+        # 主域名访问 → 302 到随机中继子域名的 /go
+        host = (self.headers.get('Host') or '').split(':')[0].lower()
+        config = load_domains()
+        relay = config.get('relay', {})
+        main_domains = relay.get('mainDomains', [])
+        relay_domains = relay.get('relayDomains', [])
+        relay_label_len = int(relay.get('labelLength', 4))
+        if host in main_domains and relay_domains and parsed.path in ('/', '/index.html', '/go', '/go/'):
+            base = random.choice(relay_domains)
+            label = ''.join(random.choices(string.ascii_lowercase + string.digits, k=relay_label_len))
+            url = f'https://{label}.{base}/go'
             self.send_response(302)
-            self.send_header('Location', self._random_subdomain_url('/go'))
+            self.send_header('Location', url)
             self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
             self.end_headers()
             return
-        # /go - 入口：生成token后跳转到前端探测页（子域名上）
+        # /go - 入口：生成token后跳转到前端探测页
         if parsed.path in ('/go', '/go/'):
             return self.handle_go_entry()
         # /go/direct - 服务端直接302跳转到目标站（跳过前端探测）

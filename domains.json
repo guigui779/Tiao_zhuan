@@ -3,6 +3,11 @@
   "updated": "2026-03-24 19:49:58",
   "siteName": "KVI",
   "servers": {},
+  "relay": {
+    "mainDomains": [],
+    "relayDomains": [],
+    "labelLength": 4
+  },
   "wildcard": {
     "enabled": true,
     "baseDomain": "a.hui-od.top",

@@ -47,6 +47,27 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
     <div class="grid">
       <div>
         <div class="field">
+          <label for="mainDomains">主域名（客户入口）</label>
+          <textarea id="mainDomains" rows="2" placeholder="每行一个，例如：&#10;fook.pro&#10;another.com"></textarea>
+          <div class="hint">客户访问这些域名时，会 302 到随机中继子域名的 /go。</div>
+        </div>
+        <div class="field">
+          <label for="relayDomains">中继泛域名</label>
+          <textarea id="relayDomains" rows="3" placeholder="每行一个，例如：&#10;fook.pro&#10;another.com"></textarea>
+          <div class="hint">主域名会随机跳到 *.这里的域名/go，需要 DNS 配置泛解析指向本服务器。</div>
+        </div>
+        <div class="field">
+          <label for="relayLabelLength">中继随机前缀长度</label>
+          <input id="relayLabelLength" type="number" min="2" max="16" value="4">
+        </div>
+      </div>
+      <div></div>
+    </div>
+    <hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:20px 0">
+
+    <div class="grid">
+      <div>
+        <div class="field">
           <label for="siteName">站点名称</label>
           <input id="siteName" type="text" placeholder="例如：A 站跳转页">
         </div>
@@ -125,6 +146,9 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
 <script>
 (function(){
   var siteName = document.getElementById('siteName');
+  var mainDomains = document.getElementById('mainDomains');
+  var relayDomains = document.getElementById('relayDomains');
+  var relayLabelLength = document.getElementById('relayLabelLength');
   var baseDomain = document.getElementById('baseDomain');
   var candidateCount = document.getElementById('candidateCount');
   var labelLength = document.getElementById('labelLength');
@@ -199,6 +223,10 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
 
   function fillForm(config){
     siteName.value = config.siteName || '';
+    var relay = config.relay || {};
+    mainDomains.value = (relay.mainDomains || []).join('\n');
+    relayDomains.value = (relay.relayDomains || []).join('\n');
+    relayLabelLength.value = relay.labelLength || 4;
     wildcardEnabled.checked = !!(config.wildcard && config.wildcard.enabled !== false);
     baseDomain.value = (config.wildcard && config.wildcard.baseDomain) || '';
     candidateCount.value = (config.wildcard && config.wildcard.candidateCount) || 6;
@@ -223,6 +251,11 @@ button{border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weig
     });
     return {
       siteName: siteName.value.trim() || '独立跳转站',
+      relay: {
+        mainDomains: linesToArray(mainDomains.value),
+        relayDomains: linesToArray(relayDomains.value),
+        labelLength: parseInt(relayLabelLength.value, 10) || 4
+      },
       wildcard: {
         enabled: wildcardEnabled.checked,
         baseDomain: baseDomain.value.trim(),
