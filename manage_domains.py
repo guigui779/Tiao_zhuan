@@ -699,6 +699,11 @@ class GoPageAdminHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        # 根路径无 token 时重定向到 /go 入口
+        if parsed.path in ('/', '/index.html'):
+            qs = urllib.parse.parse_qs(parsed.query)
+            if not qs.get('token'):
+                return self.handle_go_entry()
         # /go - 入口：生成token后跳转到前端探测页
         if parsed.path in ('/go', '/go/'):
             return self.handle_go_entry()
