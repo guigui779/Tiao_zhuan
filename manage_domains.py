@@ -84,6 +84,10 @@ TOKEN_TTL = int(os.environ.get('TOKEN_TTL', '300'))  # token 有效期，默认5
 GATE_SECRET = os.environ.get('GATE_SECRET', 'mFf44StGLBt7vkL2HZ0EKPNpHRzNhQ8yI-elmW-4-NE')
 GATE_TTL = int(os.environ.get('GATE_TTL', '300'))  # gate token 有效期，默认5分钟
 
+# 主域名（访问主域名时重定向到随机子域名）
+GO_DOMAIN = os.environ.get('GO_DOMAIN', '')  # 例如 fook.pro
+GO_SUB_LENGTH = int(os.environ.get('GO_SUB_LENGTH', '4'))  # 随机子域名长度
+
 # 巡检配置
 HEALTH_CHECK_INTERVAL = int(os.environ.get('HEALTH_CHECK_INTERVAL', '300'))  # 默认5分钟
 _health_lock = threading.Lock()
@@ -697,14 +701,28 @@ class GoPageAdminHandler(SimpleHTTPRequestHandler):
         self.send_header('Content-Length', '0')
         self.end_headers()
 
+    def _is_main_domain(self):
+        """判断请求是否来自主域名（非子域名）"""
+        if not GO_DOMAIN:
+            return False
+        host = (self.headers.get('Host') or '').split(':')[0].lower()
+        return host == GO_DOMAIN.lower()
+
+    def _random_subdomain_url(self, path='/go'):
+        """生成随机子域名的 URL"""
+        label = ''.join(random.choices(string.ascii_lowercase + string.digits, k=GO_SUB_LENGTH))
+        return f'https://{label}.{GO_DOMAIN}{path}'
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        # 根路径无 token 时重定向到 /go 入口
-        if parsed.path in ('/', '/index.html'):
-            qs = urllib.parse.parse_qs(parsed.query)
-            if not qs.get('token'):
-                return self.handle_go_entry()
-        # /go - 入口：生成token后跳转到前端探测页
+        # 主域名访问 → 重定向到随机子域名的 /go
+        if self._is_main_domain() and parsed.path in ('/', '/index.html', '/go', '/go/'):
+            self.send_response(302)
+            self.send_header('Location', self._random_subdomain_url('/go'))
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.end_headers()
+            return
+        # /go - 入口：生成token后跳转到前端探测页（子域名上）
         if parsed.path in ('/go', '/go/'):
             return self.handle_go_entry()
         # /go/direct - 服务端直接302跳转到目标站（跳过前端探测）
