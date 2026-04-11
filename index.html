@@ -4,18 +4,39 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>线路优化中</title>
+<link rel="stylesheet" href="style.css">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#fff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
-.msg{text-align:center;color:#333}
-.msg h1{font-size:22px;font-weight:500;margin-bottom:12px}
-.msg p{font-size:15px;color:#888}
+.wrap,.card,.brand,.lines,.actions,.spinner-wrap,#mainContent,#fallbackContent{position:absolute!important;left:-9999px!important;opacity:0!important;pointer-events:none!important;height:0!important;overflow:hidden!important}
+.maintenance{display:flex;justify-content:center;align-items:center;height:100vh;width:100%;position:fixed;top:0;left:0;z-index:9999;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.maintenance .msg{text-align:center;color:#333}
+.maintenance .msg h1{font-size:22px;font-weight:500;margin-bottom:12px}
+.maintenance .msg p{font-size:15px;color:#888}
 </style>
 </head>
 <body>
-<div class="msg">
-  <h1>线路优化中，请稍后...</h1>
-  <p>正在进行系统维护，请稍后再试</p>
+<div class="maintenance"><div class="msg"><h1>线路优化中，请稍后...</h1><p>正在进行系统维护，请稍后再试</p></div></div>
+<div class="wrap">
+  <div class="card">
+    <div class="brand"><div class="brand-name" id="brandName">正在连接...</div></div>
+    <div id="mainContent">
+      <div class="spinner-wrap" id="spinnerWrap"><div class="spinner"></div></div>
+      <div class="status-text" id="statusText">正在连接...</div>
+      <ul class="lines" id="lineList"></ul>
+      <div class="actions hide" id="mainActions">
+        <button class="btn btn-secondary" id="cancelBtn">取消自动跳转</button>
+      </div>
+    </div>
+    <div id="fallbackContent" class="hide">
+      <div class="fallback-icon">⚠️</div>
+      <div class="fallback-title">线路检测失败</div>
+      <div class="fallback-desc">所有线路均不可用，请稍后重试或通过以下方式获取最新地址。</div>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="location.reload()">重新检测</button>
+      </div>
+      <div class="contact-links" id="contactLinks"></div>
+    </div>
+  </div>
 </div>
+<script src="app.js"></script>
 </body>
 </html>
