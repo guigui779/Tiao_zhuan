@@ -23,6 +23,7 @@ import hmac
 import json
 import os
 import random
+import sqlite3
 import string
 import sys
 import time
@@ -32,6 +33,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 # ===== 路径 =====
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOMAINS_FILE = os.path.join(BASE_DIR, "domains.json")
+DB_FILE = os.path.join(BASE_DIR, "config.db")
 ADMIN_FILE = os.path.join(BASE_DIR, "admin.html")
 
 # ===== 环境变量 =====
@@ -130,6 +132,52 @@ def default_config():
     return copy.deepcopy(DEFAULT_CONFIG)
 
 
+def init_storage():
+    """初始化 SQLite 存储表。"""
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_kv (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+
+def load_config_from_db():
+    init_storage()
+    with sqlite3.connect(DB_FILE) as conn:
+        cur = conn.execute("SELECT value FROM app_kv WHERE key = ?", ("config",))
+        row = cur.fetchone()
+    if not row:
+        return None
+    try:
+        return normalize_config(json.loads(row[0]))
+    except Exception:
+        return None
+
+
+def save_config_to_db(data):
+    init_storage()
+    payload = json.dumps(data, ensure_ascii=False)
+    updated = data.get("updated", "")
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute(
+            """
+            INSERT INTO app_kv(key, value, updated_at)
+            VALUES(?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value=excluded.value,
+                updated_at=excluded.updated_at
+            """,
+            ("config", payload, updated),
+        )
+        conn.commit()
+
+
 def normalize_config(data):
     """将任意输入规范化为标准配置格式，所有域名经过 clean_domain。"""
     cfg = default_config()
@@ -167,9 +215,16 @@ def normalize_config(data):
 
 
 def load_config():
+    db_data = load_config_from_db()
+    if db_data is not None:
+        return db_data
+
     if os.path.exists(DOMAINS_FILE):
         with open(DOMAINS_FILE, "r", encoding="utf-8") as f:
-            return normalize_config(json.load(f))
+            data = normalize_config(json.load(f))
+            # 首次从 JSON 读取后写入 DB，完成存储迁移。
+            save_config_to_db(data)
+            return data
     return default_config()
 
 
@@ -177,6 +232,10 @@ def save_config(data):
     data = normalize_config(data)
     data["updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
     data["version"] = data.get("version", 0) + 1
+
+    save_config_to_db(data)
+
+    # 保留 JSON 文件，便于人工查看与回滚。
     with open(DOMAINS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return data
@@ -218,6 +277,35 @@ def generate_gate_token():
     sig = hmac.new(GATE_SECRET.encode(), ts.encode(), hashlib.sha256).hexdigest()[:16]
     raw = ts + ":" + sig
     return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def generate_relay_ticket(source_host):
+    """签发主域名到中继 /go 的一次性来源票据。"""
+    ts = str(int(time.time()))
+    payload = f"{source_host}:{ts}"
+    sig = hmac.new(TOKEN_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    raw = payload + ":" + sig
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def verify_relay_ticket(ticket, source_hosts):
+    """校验来源票据，必须由已配置主域名签发且在有效期内。"""
+    try:
+        padding = 4 - len(ticket) % 4
+        if padding != 4:
+            ticket += "=" * padding
+        raw = base64.urlsafe_b64decode(ticket).decode()
+        source_host, ts_str, sig = raw.split(":", 2)
+        if source_host not in source_hosts:
+            return False
+        ts = int(ts_str)
+        if abs(time.time() - ts) > TOKEN_TTL:
+            return False
+        payload = f"{source_host}:{ts_str}"
+        expected = hmac.new(TOKEN_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+        return hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
 
 
 # ================================================================
@@ -355,6 +443,12 @@ class GoPageHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.end_headers()
 
+    def send_status_only(self, status):
+        self.send_response(status)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.end_headers()
+
     # --- GET ---
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -393,11 +487,16 @@ class GoPageHandler(SimpleHTTPRequestHandler):
         if host in main_domains and relay_domains and path in ("/", "/index.html", "/go", "/go/"):
             relay_domain = random.choice(relay_domains)  # 已被 clean_domain 清洗
             label = random_label(label_len)
-            target = f"https://{label}.{relay_domain}/go"
+            relay_ticket = generate_relay_ticket(host)
+            target = f"https://{label}.{relay_domain}/go?rt={urllib.parse.quote(relay_ticket)}"
             return self.send_redirect(target)
 
         # Priority 4: /go 入口（host 不在 mainDomains → 是子域名）
         if path in ("/go", "/go/"):
+            qs = urllib.parse.parse_qs(parsed.query)
+            relay_ticket = (qs.get("rt") or [""])[0]
+            if not verify_relay_ticket(relay_ticket, main_domains):
+                return self.send_status_only(304)
             token = generate_token()
             return self.send_redirect(f"/?token={token}")
 
@@ -420,6 +519,10 @@ class GoPageHandler(SimpleHTTPRequestHandler):
 
         # Priority 8: 静态文件
         if path in ("/", "/index.html"):
+            qs = urllib.parse.parse_qs(parsed.query)
+            token = (qs.get("token") or [""])[0]
+            if not verify_token(token):
+                return self.send_status_only(505)
             self.path = "/index.html"
         return super().do_GET()
 
